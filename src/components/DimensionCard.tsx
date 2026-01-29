@@ -1,9 +1,8 @@
-import { ChevronUp, Infinity } from "lucide-react";
+import { ChevronUp, Infinity, Lock } from "lucide-react";
 
 import type { DimensionId } from "@/game/types";
-import { canAfford, productionPerSecond } from "@/game/logic";
+import { boughtMultiplier, canAfford, costForNextPurchases, productionPerSecond } from "@/game/logic";
 import { formatDecimal } from "@/game/format";
-import { multiplierForBought } from "@/game/consts";
 import type { GameOptions, PlayerState } from "@/game/types";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +19,17 @@ export function DimensionCard(props: {
   id: DimensionId;
   player: PlayerState;
   options: GameOptions;
+  locked?: boolean;
   onBuyOne: () => void;
+  onBuyTen: () => void;
   onBuyMax: () => void;
 }) {
+  const locked = props.locked ?? false;
   const dim = props.player.dimensions[props.id - 1];
   const affordable = canAfford(props.player, props.id);
-  const mult = multiplierForBought(dim.bought);
+  const tenCost = costForNextPurchases(props.player, props.id, 10);
+  const tenAffordable = !locked && props.player.points.gte(tenCost);
+  const mult = boughtMultiplier(props.player, dim.bought);
   const rate = productionPerSecond(props.player, props.id);
 
   const milestoneProgress = (dim.bought % 10) / 10;
@@ -38,7 +42,8 @@ export function DimensionCard(props: {
     <Card
       className={cn(
         "group relative overflow-hidden",
-        affordable && "shadow-[0_0_0_1px_hsl(var(--primary)/0.30),0_30px_70px_-55px_hsl(var(--primary)/0.65)]",
+        !locked && affordable &&
+          "shadow-[0_0_0_1px_hsl(var(--primary)/0.30),0_30px_70px_-55px_hsl(var(--primary)/0.65)]",
       )}
     >
       <div className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
@@ -49,15 +54,27 @@ export function DimensionCard(props: {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <CardTitle className="truncate">{tierLabel}</CardTitle>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-mono tracking-tight">Amount: {formatDecimal(dim.amount, props.options.notation)}</span>
-              <span className="opacity-50">•</span>
-              <span className="font-mono tracking-tight">Bought: {dim.bought}</span>
-            </div>
+            {locked ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1">
+                  <Lock className="h-3.5 w-3.5" /> Locked
+                </span>
+                <span className="opacity-50">•</span>
+                <span>Unlock via Dimension Boosts</span>
+              </div>
+            ) : (
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-mono tracking-tight">
+                  Amount: {formatDecimal(dim.amount, props.options.notation)}
+                </span>
+                <span className="opacity-50">•</span>
+                <span className="font-mono tracking-tight">Bought: {dim.bought}</span>
+              </div>
+            )}
           </div>
-          <Badge variant="accent" className="shrink-0">
+          <Badge variant={locked ? "outline" : "accent"} className="shrink-0">
             <Infinity className="h-3.5 w-3.5" />
-            Tier {props.id}
+            {locked ? "Locked" : `Tier ${props.id}`}
           </Badge>
         </div>
       </CardHeader>
@@ -83,7 +100,7 @@ export function DimensionCard(props: {
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Multiplier scales with purchases (x1.05 each) and doubles every 10 bought.
+                  Doubles every 10 purchases.
                 </TooltipContent>
               </Tooltip>
             </div>
@@ -100,17 +117,29 @@ export function DimensionCard(props: {
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
             <div className="text-xs text-muted-foreground">Cost</div>
-            <div className={cn("mt-0.5 font-mono text-sm tracking-tight", affordable ? "text-foreground" : "text-muted-foreground")}>
-              {formatDecimal(dim.cost, props.options.notation)}
-              <span className="ml-2 text-muted-foreground">points</span>
-            </div>
+            {locked ? (
+              <div className="mt-0.5 text-sm text-muted-foreground">—</div>
+            ) : (
+              <div
+                className={cn(
+                  "mt-0.5 font-mono text-sm tracking-tight",
+                  affordable ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {formatDecimal(dim.cost, props.options.notation)}
+                <span className="ml-2 text-muted-foreground">points</span>
+              </div>
+            )}
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="outline" className="h-10" onClick={props.onBuyMax}>
+            <Button variant="outline" className="h-10" onClick={props.onBuyMax} disabled={locked}>
               Buy max
             </Button>
-            <Button className="h-10" onClick={props.onBuyOne} disabled={!affordable}>
+            <Button variant="outline" className="h-10" onClick={props.onBuyTen} disabled={!tenAffordable}>
+              Buy 10
+            </Button>
+            <Button className="h-10" onClick={props.onBuyOne} disabled={locked || !affordable}>
               Buy 1
             </Button>
           </div>
